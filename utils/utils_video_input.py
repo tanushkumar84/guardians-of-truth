@@ -223,26 +223,13 @@ def process_video_input(video_file):
                         model_name = result['model_type'].upper()
                         
                         # Build prediction display
-                        prediction_html = f"""
-                        <div style='padding: 15px; border-radius: 10px; border: 1px solid #ddd; margin: 5px 0;'>
-                            <h4>{model_name}</h4>
-                            <p>Overall Prediction: {format_prediction(result['prediction'])}<br>
-                            Confidence: {format_confidence(result['confidence'])}<br>
-                            Fake Frames: {result['fake_frame_ratio']:.1%} ({result['fake_count']}/{result['total_frames']})</p>
-                        """
+                        prediction_html = f"""<div style='padding: 15px; border-radius: 10px; border: 1px solid #ddd; margin: 5px 0;'><h4>{model_name}</h4><p>Overall Prediction: {format_prediction(result['prediction'])}<br>Confidence: {format_confidence(result['confidence'])}<br>Fake Frames: {result['fake_frame_ratio']:.1%} ({result['fake_count']}/{result['total_frames']})</p>"""
                         
                         # Add full frame analysis details if available
                         if analysis_mode == 'full_frame':
                             avg_artifact = result.get('avg_artifact_score', 0)
                             avg_inconsistency = result.get('avg_region_inconsistency', 0)
-                            prediction_html += f"""
-                            <div style='font-size: 0.9em; color: #666; margin-top: 8px; border-top: 1px solid #eee; padding-top: 8px;'>
-                            <strong>Full Frame Analysis:</strong><br>
-                            📊 Artifact Score: {avg_artifact:.3f}<br>
-                            🔍 Region Inconsistency: {avg_inconsistency:.3f}<br>
-                            🎬 Analysis: Entire frames (objects, backgrounds, scenes)
-                            </div>
-                            """
+                            prediction_html += f"""<div style='font-size: 0.9em; color: #666; margin-top: 8px; border-top: 1px solid #eee; padding-top: 8px;'><strong>Full Frame Analysis:</strong><br>📊 Artifact Score: {avg_artifact:.3f}<br>🔍 Region Inconsistency: {avg_inconsistency:.3f}<br>🎬 Analysis: Entire frames (objects, backgrounds, scenes)</div>"""
                         
                         prediction_html += "</div>"
                         st.markdown(prediction_html, unsafe_allow_html=True)
