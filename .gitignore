@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit secrets (IMPORTANT - never commit!)
+.streamlit/secrets.toml
+
+# Project specific
+mlruns/
+runs/models/
+*.pth
+*.pt
+*.ckpt
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data
+data/
+dataset/
+*.mp4
+*.avi
+*.mov
+
+# Reports
+*.html

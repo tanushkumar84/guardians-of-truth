@@ -1,0 +1,21 @@
+# .dockerignore
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+*.log
+.git
+.gitignore
+.streamlit/secrets.toml
+mlruns/
+.DS_Store
+*.ipynb_checkpoints
+.vscode/
+.idea/
+*.md
+!README.md
+!DEPLOYMENT.md

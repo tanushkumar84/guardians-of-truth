@@ -1,0 +1,1301 @@
+================================================================================
+                    DEEPFAKE DETECTION PROJECT - WORKFLOW DIAGRAMS
+================================================================================
+
+This file contains detailed ASCII diagrams and Mermaid code for visualizing
+the complete architecture and workflows of the Deepfake Detection System.
+
+================================================================================
+                    DIAGRAM 1: EFFICIENTNET-B3 TRAINING WORKFLOW
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        EFFICIENTNET-B3 TRAINING PIPELINE                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────────────┐
+                              │  START TRAINING  │
+                              └────────┬─────────┘
+                                       │
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │   LOAD DATASET               │
+                        │   • Train: 70% samples       │
+                        │   • Val: 15% samples         │
+                        │   • Test: 15% samples        │
+                        │   • Classes: Real/Fake       │
+                        └──────────┬───────────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────────────┐
+                        │   DATA AUGMENTATION          │
+                        │   (Applied to training only) │
+                        └──────────┬───────────────────┘
+                                   │
+                ┌──────────────────┼──────────────────┐
+                │                  │                  │
+                ▼                  ▼                  ▼
+    ┌──────────────────┐  ┌──────────────┐  ┌─────────────────┐
+    │ RandomHorizontal │  │ ColorJitter  │  │ RandomRotation  │
+    │ Flip (p=0.5)     │  │ Brightness   │  │ (±15 degrees)   │
+    │                  │  │ Contrast     │  │                 │
+    │ ✓ Mirror faces   │  │ Saturation   │  │ ✓ Rotation      │
+    └────────┬─────────┘  └──────┬───────┘  └────────┬────────┘
+             │                   │                    │
+             └───────────────────┼────────────────────┘
+                                 │
+                                 ▼
+                    ┌────────────────────────────┐
+                    │   PREPROCESSING            │
+                    │   • Resize: 300×300        │
+                    │   • Center Crop: 300×300   │
+                    │   • Normalize: ImageNet    │
+                    │     mean=[0.485,0.456,0.406]│
+                    │     std=[0.229,0.224,0.225] │
+                    └──────────┬─────────────────┘
+                               │
+                               ▼
+                ┌──────────────────────────────────────┐
+                │      BATCH CREATION                  │
+                │      • Batch Size: 32                │
+                │      • Shuffle: True (train)         │
+                │      • Num Workers: 4                │
+                └──────────┬───────────────────────────┘
+                           │
+                           ▼
+        ┌──────────────────────────────────────────────────┐
+        │           EFFICIENTNET-B3 MODEL                  │
+        │           (Pre-trained on ImageNet)              │
+        └──────────┬───────────────────────────────────────┘
+                   │
+    ┌──────────────┼──────────────┐
+    │              │              │
+    ▼              ▼              ▼
+┌─────────┐  ┌─────────┐  ┌──────────────┐
+│ Block 1 │  │ Block 2 │  │  Block 7     │
+│ MBConv1 │→ │ MBConv6 │→ │  (Final)     │
+│ 32→16   │  │ 16→24   │  │  320→1536    │
+└─────────┘  └─────────┘  └──────┬───────┘
+                                  │
+                                  ▼
+                    ┌─────────────────────────────┐
+                    │   CUSTOM CLASSIFIER HEAD    │
+                    │                             │
+                    │   ┌───────────────────────┐ │
+                    │   │ Global Avg Pool       │ │
+                    │   │ (1536 features)       │ │
+                    │   └──────────┬────────────┘ │
+                    │              │              │
+                    │              ▼              │
+                    │   ┌───────────────────────┐ │
+                    │   │ Dropout (p=0.3)       │ │
+                    │   └──────────┬────────────┘ │
+                    │              │              │
+                    │              ▼              │
+                    │   ┌───────────────────────┐ │
+                    │   │ Linear(1536 → 512)    │ │
+                    │   │ + ReLU                │ │
+                    │   │ + BatchNorm1d         │ │
+                    │   └──────────┬────────────┘ │
+                    │              │              │
+                    │              ▼              │
+                    │   ┌───────────────────────┐ │
+                    │   │ Dropout (p=0.3)       │ │
+                    │   └──────────┬────────────┘ │
+                    │              │              │
+                    │              ▼              │
+                    │   ┌───────────────────────┐ │
+                    │   │ Linear(512 → 2)       │ │
+                    │   │ [Real, Fake]          │ │
+                    │   └──────────┬────────────┘ │
+                    │              │              │
+                    └──────────────┼──────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────┐
+                        │   FORWARD PASS       │
+                        │   Output: [B, 2]     │
+                        │   (Logits)           │
+                        └──────────┬───────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────────────┐
+                        │   LOSS CALCULATION           │
+                        │   CrossEntropyLoss           │
+                        │   + Label Smoothing (0.1)    │
+                        └──────────┬───────────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────────────┐
+                        │   OPTIMIZER STEP             │
+                        │   AdamW with Differential LR │
+                        │   • Backbone: LR = 1e-4      │
+                        │   • Classifier: LR = 1e-3    │
+                        │   • Weight Decay: 0.01       │
+                        └──────────┬───────────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────────────┐
+                        │   VALIDATION PHASE           │
+                        │   (After each epoch)         │
+                        └──────────┬───────────────────┘
+                                   │
+                ┌──────────────────┼──────────────────┐
+                │                  │                  │
+                ▼                  ▼                  ▼
+    ┌──────────────────┐  ┌──────────────┐  ┌──────────────┐
+    │ Calculate Loss   │  │  Calculate   │  │  Save Best   │
+    │ on Val Set       │  │  Accuracy    │  │  Model       │
+    │                  │  │  Precision   │  │  (best val   │
+    │                  │  │  Recall      │  │   accuracy)  │
+    │                  │  │  F1-Score    │  │              │
+    └────────┬─────────┘  └──────┬───────┘  └──────┬───────┘
+             │                   │                  │
+             └───────────────────┼──────────────────┘
+                                 │
+                                 ▼
+                    ┌────────────────────────────┐
+                    │   LEARNING RATE SCHEDULER  │
+                    │   ReduceLROnPlateau        │
+                    │   • Patience: 5 epochs     │
+                    │   • Factor: 0.5            │
+                    │   • Min LR: 1e-7           │
+                    └──────────┬─────────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────────┐
+                    │  EARLY STOPPING CHECK   │
+                    │  Patience: 10 epochs    │
+                    └──────────┬──────────────┘
+                               │
+                    ┌──────────┴──────────┐
+                    │                     │
+                    ▼                     ▼
+            ┌───────────────┐    ┌────────────────┐
+            │ Continue to   │    │ STOP TRAINING  │
+            │ Next Epoch    │    │ (No improvement)│
+            └───────┬───────┘    └────────────────┘
+                    │
+                    │ (Epochs < MAX_EPOCHS)
+                    │
+                    └──────────┐
+                               │
+                               ▼
+                    ┌──────────────────────────┐
+                    │   EPOCH COMPLETE         │
+                    │   • Log Metrics (MLflow) │
+                    │   • Plot Learning Curves │
+                    │   • Save Checkpoint      │
+                    └──────────┬───────────────┘
+                               │
+                               │ (Loop back to next batch)
+                               │
+                ┌──────────────┴────────────────┐
+                │                               │
+                ▼                               ▼
+    ┌──────────────────────┐        ┌──────────────────────┐
+    │  TRAINING COMPLETE   │        │  FINAL EVALUATION    │
+    │  (Max epochs or      │───────→│  • Test Set          │
+    │   early stop)        │        │  • Confusion Matrix  │
+    └──────────────────────┘        │  • ROC Curve         │
+                                    │  • Classification    │
+                                    │    Report            │
+                                    └──────────┬───────────┘
+                                               │
+                                               ▼
+                                    ┌──────────────────────┐
+                                    │  SAVE FINAL MODEL    │
+                                    │  Location:           │
+                                    │  runs/models/        │
+                                    │  efficientnet/       │
+                                    │  best_model_cpu.pth  │
+                                    └──────────────────────┘
+
+================================================================================
+MERMAID CODE FOR EFFICIENTNET-B3 TRAINING:
+================================================================================
+
+```mermaid
+graph TD
+    A[Start Training] --> B[Load Dataset<br/>Train: 70%, Val: 15%, Test: 15%]
+    B --> C[Data Augmentation]
+    C --> D1[Random Horizontal Flip]
+    C --> D2[Color Jitter]
+    C --> D3[Random Rotation ±15°]
+    D1 --> E[Preprocessing<br/>Resize: 300×300<br/>Normalize: ImageNet]
+    D2 --> E
+    D3 --> E
+    E --> F[Batch Creation<br/>Batch Size: 32]
+    F --> G[EfficientNet-B3 Backbone<br/>Pre-trained on ImageNet]
+    G --> H[Custom Classifier Head<br/>GAP → Dropout → FC(1536→512)<br/>→ Dropout → FC(512→2)]
+    H --> I[Forward Pass<br/>Output: Logits [B, 2]]
+    I --> J[Loss Calculation<br/>CrossEntropyLoss + Label Smoothing]
+    J --> K[Optimizer Step<br/>AdamW<br/>Backbone LR: 1e-4<br/>Classifier LR: 1e-3]
+    K --> L[Validation Phase]
+    L --> M1[Calculate Loss]
+    L --> M2[Calculate Metrics<br/>Accuracy, Precision, Recall, F1]
+    L --> M3[Save Best Model]
+    M1 --> N[LR Scheduler<br/>ReduceLROnPlateau]
+    M2 --> N
+    M3 --> N
+    N --> O[Early Stopping Check]
+    O --> P{Continue?}
+    P -->|Yes| Q[Next Epoch]
+    P -->|No| R[Training Complete]
+    Q --> F
+    R --> S[Final Evaluation<br/>Test Set, Confusion Matrix, ROC]
+    S --> T[Save Final Model<br/>runs/models/efficientnet/best_model_cpu.pth]
+```
+
+================================================================================
+AI IMAGE GENERATION PROMPT FOR EFFICIENTNET TRAINING DIAGRAM:
+================================================================================
+
+Create a detailed technical flowchart diagram showing the EfficientNet-B3 training 
+pipeline for deepfake detection. The diagram should include:
+
+1. Top section: Dataset loading with train/val/test split (70/15/15)
+2. Data augmentation layer showing RandomHorizontalFlip, ColorJitter, and 
+   RandomRotation operations in parallel branches
+3. Preprocessing step with resize to 300×300 and ImageNet normalization
+4. EfficientNet-B3 architecture blocks (MBConv layers) flowing downward
+5. Custom classifier head with detailed layer dimensions (GAP, Dropout, 
+   FC 1536→512, FC 512→2)
+6. Loss calculation box (CrossEntropyLoss with label smoothing)
+7. Optimizer section showing AdamW with differential learning rates
+8. Validation phase with metrics calculation branching
+9. Learning rate scheduler and early stopping decision diamond
+10. Final model saving box at the bottom
+
+Use modern tech diagram styling with:
+- Blue gradient boxes for data processing steps
+- Orange boxes for model layers
+- Green boxes for evaluation/metrics
+- Red boxes for loss/optimization
+- Arrows showing data flow direction
+- Icons for each operation type
+- Clean, professional appearance suitable for research papers
+
+Style: Technical documentation, IEEE paper quality, high contrast colors, 
+clear typography, UML-style flowchart with decision diamonds and process rectangles.
+
+================================================================================
+
+
+================================================================================
+                    DIAGRAM 2: SWIN TRANSFORMER TRAINING WORKFLOW
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      SWIN TRANSFORMER TRAINING PIPELINE                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────────┐
+                              │    START     │
+                              └──────┬───────┘
+                                     │
+                                     ▼
+                    ┌────────────────────────────────┐
+                    │  DATASET LOADING               │
+                    │  Train: 70% | Val: 15% | Test: 15%│
+                    └──────────┬─────────────────────┘
+                               │
+                               ▼
+                ┌──────────────────────────────────────────┐
+                │       ADVANCED AUGMENTATION              │
+                └──────────┬───────────────────────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+┌──────────────┐   ┌──────────────┐   ┌─────────────┐
+│ RandAugment  │   │ Mixup        │   │ CutMix      │
+│ (magnitude:9)│   │ (alpha=0.2)  │   │ (alpha=1.0) │
+└──────┬───────┘   └──────┬───────┘   └──────┬──────┘
+       │                  │                  │
+       └──────────────────┼──────────────────┘
+                          │
+                          ▼
+            ┌─────────────────────────────────┐
+            │  PREPROCESSING                  │
+            │  • Resize: 224×224              │
+            │  • Normalize: ImageNet stats    │
+            └──────────┬──────────────────────┘
+                       │
+                       ▼
+            ┌─────────────────────────────────┐
+            │  BATCH: 16 (Grad Accum: 2)      │
+            └──────────┬──────────────────────┘
+                       │
+                       ▼
+    ┌──────────────────────────────────────────────────┐
+    │        SWIN TRANSFORMER BASE                     │
+    │        (Hierarchical Vision Transformer)         │
+    └──────────┬───────────────────────────────────────┘
+               │
+    ┌──────────┼──────────┬───────────┬────────────┐
+    │          │          │           │            │
+    ▼          ▼          ▼           ▼            ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌──────────┐
+│Stage 1 │→│Stage 2 │→│Stage 3 │→│Stage 4 │→│ Head     │
+│Patch   │ │H×W     │ │H/2×W/2 │ │H/4×W/4 │ │1024 feat │
+│Embed   │ │Swin    │ │Swin    │ │Swin    │ │          │
+│96 ch   │ │Blocks  │ │Blocks  │ │Blocks  │ │          │
+└────────┘ └────────┘ └────────┘ └────────┘ └──────────┘
+                                                  │
+                                                  ▼
+                            ┌─────────────────────────────┐
+                            │  CUSTOM CLASSIFIER          │
+                            │  LayerNorm → FC(1024→512)   │
+                            │  GELU → Dropout(0.3)        │
+                            │  FC(512→256) → GELU         │
+                            │  Dropout(0.2) → FC(256→2)   │
+                            └──────────┬──────────────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────────┐
+                            │  FOCAL LOSS          │
+                            │  α=0.25, γ=2.0       │
+                            └──────────┬───────────┘
+                                       │
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  OPTIMIZER: AdamW            │
+                        │  LR: 1e-5 → 1e-6 (Cosine)    │
+                        │  Weight Decay: 0.05          │
+                        └──────────┬───────────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────────────┐
+                        │  VALIDATION & METRICS        │
+                        │  Acc | Precision | Recall    │
+                        └──────────┬───────────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────────────┐
+                        │  EARLY STOP (Patience: 10)   │
+                        └──────────┬───────────────────┘
+                                   │
+                        ┌──────────┴──────────┐
+                        │                     │
+                        ▼                     ▼
+                  ┌──────────┐        ┌─────────────┐
+                  │ Continue │        │ SAVE MODEL  │
+                  └────┬─────┘        │best_model   │
+                       │              │_cpu.pth     │
+                       └──────────────┴─────────────┘
+
+================================================================================
+MERMAID CODE FOR SWIN TRANSFORMER TRAINING:
+================================================================================
+
+```mermaid
+graph TD
+    A[Start] --> B[Load Dataset 70/15/15]
+    B --> C[Advanced Augmentation]
+    C --> D1[RandAugment m=9]
+    C --> D2[Mixup α=0.2]
+    C --> D3[CutMix α=1.0]
+    D1 --> E[Preprocess 224×224]
+    D2 --> E
+    D3 --> E
+    E --> F[Batch 16 + GradAccum 2]
+    F --> G[Swin Transformer Base]
+    G --> H1[Stage 1: Patch Embed]
+    H1 --> H2[Stage 2: Swin Blocks]
+    H2 --> H3[Stage 3: Swin Blocks]
+    H3 --> H4[Stage 4: Output 1024]
+    H4 --> I[Custom Classifier<br/>LN→FC→GELU→FC→FC]
+    I --> J[Focal Loss α=0.25 γ=2.0]
+    J --> K[AdamW + Cosine LR]
+    K --> L[Validation]
+    L --> M{Early Stop?}
+    M -->|No| F
+    M -->|Yes| N[Save Model]
+```
+
+================================================================================
+AI PROMPT FOR SWIN TRANSFORMER DIAGRAM:
+================================================================================
+
+Create a compact technical flowchart for Swin Transformer training pipeline. 
+Include: Dataset split → Advanced augmentation (RandAugment, Mixup, CutMix in 
+parallel) → Preprocessing (224×224) → Batch processing → Swin architecture 
+(4 stages with hierarchical attention) → Custom classifier (3-layer MLP) → 
+Focal Loss → AdamW optimizer with cosine annealing → Validation loop → 
+Early stopping decision → Model saving. Use purple/blue gradient for transformer 
+blocks, orange for augmentation, green for validation. Fit on single page A4.
+
+================================================================================
+
+
+================================================================================
+                    DIAGRAM 3: CUSTOM LIGHTWEIGHT CNN TRAINING WORKFLOW
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    CUSTOM LIGHTWEIGHT CNN TRAINING PIPELINE                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────────┐
+                              │    START     │
+                              └──────┬───────┘
+                                     │
+                                     ▼
+                    ┌────────────────────────────────┐
+                    │  DATASET: Leonardo12356       │
+                    │  20K samples (balanced)        │
+                    └──────────┬─────────────────────┘
+                               │
+                               ▼
+                    ┌────────────────────────────────┐
+                    │  BASIC AUGMENTATION            │
+                    │  HFlip | Rotation | Brightness │
+                    └──────────┬─────────────────────┘
+                               │
+                               ▼
+                    ┌────────────────────────────────┐
+                    │  PREPROCESS: 128×128           │
+                    │  Normalize [0,1]               │
+                    └──────────┬─────────────────────┘
+                               │
+                               ▼
+                    ┌────────────────────────────────┐
+                    │  BATCH: 64                     │
+                    └──────────┬─────────────────────┘
+                               │
+                               ▼
+    ┌──────────────────────────────────────────────────────────┐
+    │              CUSTOM CNN ARCHITECTURE                     │
+    │              (430K parameters, 1.7MB)                    │
+    └──────────┬───────────────────────────────────────────────┘
+               │
+    ┌──────────┼──────────┬──────────┬──────────┐
+    │          │          │          │          │
+    ▼          ▼          ▼          ▼          ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌─────────┐
+│Block 1 │→│Block 2 │→│Block 3 │→│Block 4 │→│Classify │
+│Conv 32 │ │Conv 64 │ │Conv 128│ │Conv 256│ │GAP      │
+│MaxPool │ │MaxPool │ │MaxPool │ │MaxPool │ │FC 256→2 │
+└────────┘ └────────┘ └────────┘ └────────┘ └─────────┘
+                                                  │
+                                                  ▼
+                            ┌─────────────────────────────┐
+                            │  CROSS ENTROPY LOSS         │
+                            └──────────┬──────────────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────────┐
+                            │  ADAM OPTIMIZER      │
+                            │  LR: 0.001           │
+                            └──────────┬───────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────────┐
+                            │  10 EPOCHS           │
+                            │  Validation: 81% Acc │
+                            └──────────┬───────────┘
+                                       │
+                                       ▼
+                            ┌──────────────────────┐
+                            │  SAVE: 1.7MB MODEL   │
+                            │  custom_lightweight/ │
+                            └──────────────────────┘
+
+================================================================================
+MERMAID CODE FOR CUSTOM CNN TRAINING:
+================================================================================
+
+```mermaid
+graph TD
+    A[Start] --> B[Leonardo12356 Dataset<br/>20K balanced samples]
+    B --> C[Basic Augmentation<br/>HFlip, Rotation, Brightness]
+    C --> D[Preprocess 128×128]
+    D --> E[Batch Size: 64]
+    E --> F[Custom CNN 430K params]
+    F --> G1[Block1: Conv32→MaxPool]
+    G1 --> G2[Block2: Conv64→MaxPool]
+    G2 --> G3[Block3: Conv128→MaxPool]
+    G3 --> G4[Block4: Conv256→MaxPool]
+    G4 --> H[Classifier: GAP→FC256→2]
+    H --> I[CrossEntropyLoss]
+    I --> J[Adam LR=0.001]
+    J --> K[Train 10 Epochs]
+    K --> L[Validation: 81% Acc]
+    L --> M[Save Model 1.7MB]
+```
+
+================================================================================
+AI PROMPT FOR CUSTOM CNN DIAGRAM:
+================================================================================
+
+Create a compact flowchart for Custom Lightweight CNN training. Show: Dataset 
+(20K samples) → Basic augmentation → Preprocessing (128×128) → Batch 64 → 
+4 Conv blocks (32→64→128→256 with MaxPool) → Classifier → CrossEntropy loss → 
+Adam optimizer → 10 epochs → Model saving (1.7MB). Use simple, clean design 
+with green boxes for conv blocks, minimal decorations. Emphasize lightweight 
+nature. Fit on single page.
+
+================================================================================
+
+
+================================================================================
+                    DIAGRAM 4: IMAGE ANALYSIS WORKFLOW
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        IMAGE DEEPFAKE DETECTION WORKFLOW                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              ┌──────────────────┐
+                              │  USER UPLOADS    │
+                              │  IMAGE FILE      │
+                              │  (JPG/PNG/JPEG)  │
+                              └────────┬─────────┘
+                                       │
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  IMAGE VALIDATION            │
+                        │  • Check format              │
+                        │  • Check file size           │
+                        │  • Load with PIL/CV2         │
+                        └──────────┬───────────────────┘
+                                   │
+                                   ▼
+                        ┌──────────────────────────────┐
+                        │  FACE DETECTION              │
+                        │  MediaPipe Face Detection    │
+                        │  • Min confidence: 0.5       │
+                        │  • Model: short_range        │
+                        └──────────┬───────────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+                    ▼                             ▼
+        ┌───────────────────────┐    ┌──────────────────────┐
+        │  FACE FOUND           │    │  NO FACE DETECTED    │
+        │  Extract bbox coords  │    │  Show error message  │
+        │  x, y, width, height  │    │  Request new image   │
+        └───────────┬───────────┘    └──────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────────────────┐
+        │  FACE EXTRACTION                  │
+        │  • Add 20% padding around bbox    │
+        │  • Crop face region               │
+        │  • Convert to RGB                 │
+        └───────────┬───────────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────────────────────────────────┐
+        │           PARALLEL MODEL PREPROCESSING            │
+        └───────────┬───────────────────────────────────────┘
+                    │
+    ┌───────────────┼───────────────┬───────────────────────┐
+    │               │               │                       │
+    ▼               ▼               ▼                       │
+┌─────────────┐ ┌──────────┐ ┌──────────────┐            │
+│EfficientNet │ │   Swin   │ │ Custom CNN   │            │
+│Preprocessing│ │Preprocess│ │ Preprocessing│            │
+│             │ │          │ │              │            │
+│Resize: 300  │ │Resize:224│ │Resize: 128   │            │
+│Center Crop  │ │CenterCrop│ │Center Crop   │            │
+│Normalize:   │ │Normalize:│ │Normalize:    │            │
+│ImageNet     │ │ImageNet  │ │[0, 1]        │            │
+│mean/std     │ │mean/std  │ │              │            │
+└──────┬──────┘ └────┬─────┘ └──────┬───────┘            │
+       │             │               │                    │
+       ▼             ▼               ▼                    │
+┌─────────────┐ ┌──────────┐ ┌──────────────┐            │
+│ Convert to  │ │Convert to│ │ Convert to   │            │
+│ Tensor      │ │ Tensor   │ │ Tensor       │            │
+│ [1,3,300,   │ │[1,3,224, │ │ [1,3,128,    │            │
+│  300]       │ │ 224]     │ │  128]        │            │
+└──────┬──────┘ └────┬─────┘ └──────┬───────┘            │
+       │             │               │                    │
+       ▼             ▼               ▼                    │
+┌─────────────────────────────────────────────────────────┼──┐
+│              MODEL INFERENCE (Cached Models)            │  │
+└─────────────────────────────────────────────────────────┼──┘
+       │             │               │                    │
+       ▼             ▼               ▼                    │
+┌─────────────┐ ┌──────────┐ ┌──────────────┐            │
+│EfficientNet │ │   Swin   │ │ Custom CNN   │            │
+│Forward Pass │ │ Forward  │ │ Forward Pass │            │
+│             │ │   Pass   │ │              │            │
+│Output:      │ │Output:   │ │Output:       │            │
+│[1, 2]       │ │[1, 2]    │ │[1, 2]        │            │
+│logits       │ │logits    │ │logits        │            │
+└──────┬──────┘ └────┬─────┘ └──────┬───────┘            │
+       │             │               │                    │
+       ▼             ▼               ▼                    │
+┌─────────────┐ ┌──────────┐ ┌──────────────┐            │
+│ Softmax     │ │ Softmax  │ │ Softmax      │            │
+│ [Real,Fake] │ │[Real,Fake│ │ [Real, Fake] │            │
+│ Probs       │ │ Probs    │ │ Probs        │            │
+└──────┬──────┘ └────┬─────┘ └──────┬───────┘            │
+       │             │               │                    │
+       ▼             ▼               ▼                    │
+┌─────────────┐ ┌──────────┐ ┌──────────────┐            │
+│Prediction:  │ │Prediction│ │Prediction:   │            │
+│REAL/FAKE    │ │REAL/FAKE │ │REAL/FAKE     │            │
+│             │ │          │ │              │            │
+│Confidence:  │ │Confidence│ │Confidence:   │            │
+│92.5%        │ │89.3%     │ │78.1%         │            │
+└──────┬──────┘ └────┬─────┘ └──────┬───────┘            │
+       │             │               │                    │
+       └─────────────┼───────────────┘                    │
+                     │                                    │
+                     ▼                                    │
+        ┌────────────────────────────────┐                │
+        │    ENSEMBLE AGGREGATION        │                │
+        │    • Weighted voting           │                │
+        │    • EfficientNet: 0.4 weight  │                │
+        │    • Swin: 0.4 weight          │                │
+        │    • Custom: 0.2 weight        │                │
+        │    • Threshold: 0.5            │                │
+        └────────────┬───────────────────┘                │
+                     │                                    │
+                     ▼                                    │
+        ┌────────────────────────────────┐                │
+        │    FINAL VERDICT               │                │
+        │    If avg_prob > 0.5: FAKE ⚠️  │                │
+        │    Else: REAL ✅               │                │
+        └────────────┬───────────────────┘                │
+                     │                                    │
+                     ▼                                    │
+        ┌────────────────────────────────────────────────┐│
+        │           DISPLAY RESULTS                      ││
+        │                                                ││
+        │  ┌──────────────────────────────────────────┐ ││
+        │  │  Model-wise Predictions (3 columns)      │ ││
+        │  │  • EfficientNet: REAL 92.5%             │ ││
+        │  │  • Swin: REAL 89.3%                      │ ││
+        │  │  • Custom CNN: FAKE 78.1%                │ ││
+        │  └──────────────────────────────────────────┘ ││
+        │                                                ││
+        │  ┌──────────────────────────────────────────┐ ││
+        │  │  Final Verdict Banner                     │ ││
+        │  │  🟢 REAL IMAGE - Confidence: 86.7%       │ ││
+        │  └──────────────────────────────────────────┘ ││
+        │                                                ││
+        │  ┌──────────────────────────────────────────┐ ││
+        │  │  Visualizations                          │ ││
+        │  │  • Original image with face bbox         │ ││
+        │  │  • Extracted face region                 │ ││
+        │  │  • Detection confidence indicators       │ ││
+        │  └──────────────────────────────────────────┘ ││
+        └────────────────────────────────────────────────┘│
+                                                           │
+                     User can upload another image ────────┘
+
+================================================================================
+MERMAID CODE FOR IMAGE ANALYSIS WORKFLOW:
+================================================================================
+
+```mermaid
+graph TD
+    A[User Uploads Image] --> B[Image Validation]
+    B --> C[Face Detection MediaPipe]
+    C --> D{Face Found?}
+    D -->|No| E[Error: No Face]
+    D -->|Yes| F[Extract Face with 20% Padding]
+    F --> G[Parallel Preprocessing]
+    G --> G1[EfficientNet: 300×300]
+    G --> G2[Swin: 224×224]
+    G --> G3[Custom: 128×128]
+    G1 --> H1[EfficientNet Inference]
+    G2 --> H2[Swin Inference]
+    G3 --> H3[Custom CNN Inference]
+    H1 --> I1[Softmax → Probs]
+    H2 --> I2[Softmax → Probs]
+    H3 --> I3[Softmax → Probs]
+    I1 --> J[Ensemble Aggregation<br/>Weighted: 0.4, 0.4, 0.2]
+    I2 --> J
+    I3 --> J
+    J --> K{Avg Prob > 0.5?}
+    K -->|Yes| L[FAKE ⚠️]
+    K -->|No| M[REAL ✅]
+    L --> N[Display Results<br/>3 Model Predictions + Verdict + Viz]
+    M --> N
+    N --> O[Ready for Next Image]
+```
+
+================================================================================
+AI PROMPT FOR IMAGE WORKFLOW DIAGRAM:
+================================================================================
+
+Create a detailed flowchart for image deepfake detection workflow. Show: User 
+upload → Validation → MediaPipe face detection (decision diamond) → Face 
+extraction → Three parallel preprocessing paths (EfficientNet 300×300, Swin 
+224×224, Custom 128×128) → Three model inference boxes → Softmax conversion → 
+Ensemble aggregation (weighted 0.4/0.4/0.2) → Decision diamond (threshold 0.5) → 
+Final verdict (REAL/FAKE) → Results display (3-column layout with predictions, 
+verdict banner, visualizations). Use blue for preprocessing, orange for models, 
+green for results. Single page A4 landscape.
+
+================================================================================
+
+
+================================================================================
+                    DIAGRAM 5: VIDEO ANALYSIS WORKFLOW
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        VIDEO DEEPFAKE DETECTION WORKFLOW                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                         ┌────────────────────┐
+                         │  USER UPLOADS      │
+                         │  VIDEO FILE        │
+                         │  (MP4/AVI/MOV)     │
+                         │  Max: 200MB        │
+                         └─────────┬──────────┘
+                                   │
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │  VIDEO VALIDATION            │
+                    │  • Check format & size       │
+                    │  • Load with OpenCV          │
+                    │  • Get metadata (FPS, frames)│
+                    └──────────┬───────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────────────────┐
+                    │  USER SELECTS                │
+                    │  • Num frames to analyze     │
+                    │  • Analysis mode:            │
+                    │    - Full Frame              │
+                    │    - Face Only               │
+                    └──────────┬───────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────────────────┐
+                    │  FRAME EXTRACTION            │
+                    │  • Uniform sampling          │
+                    │  • Extract N frames          │
+                    │  • Convert BGR → RGB         │
+                    └──────────┬───────────────────┘
+                               │
+                               ▼
+              ┌────────────────┴────────────────┐
+              │                                 │
+              ▼                                 ▼
+┌─────────────────────────┐      ┌────────────────────────┐
+│  FULL FRAME MODE        │      │  FACE ONLY MODE        │
+│  Analyze entire frames  │      │  Detect faces first    │
+└────────┬────────────────┘      └────────┬───────────────┘
+         │                                 │
+         │                                 ▼
+         │                    ┌────────────────────────────┐
+         │                    │  FACE DETECTION PER FRAME  │
+         │                    │  MediaPipe (conf > 0.5)    │
+         │                    │  • Skip if no face found   │
+         │                    │  • Extract face with pad   │
+         │                    └────────┬───────────────────┘
+         │                             │
+         └─────────────────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────────────────┐
+                    │  FOR EACH FRAME:             │
+                    │  PROCESS WITH 3 MODELS       │
+                    └──────────┬───────────────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+┌───────────────┐    ┌─────────────────┐    ┌──────────────┐
+│ EfficientNet  │    │ Swin Transform  │    │  Custom CNN  │
+│ Process Frame │    │ Process Frame   │    │ Process Frame│
+│ 300×300       │    │ 224×224         │    │ 128×128      │
+└───────┬───────┘    └────────┬────────┘    └──────┬───────┘
+        │                     │                     │
+        ▼                     ▼                     ▼
+┌───────────────┐    ┌─────────────────┐    ┌──────────────┐
+│ Frame Result  │    │ Frame Result    │    │ Frame Result │
+│ [Real, Fake]  │    │ [Real, Fake]    │    │ [Real, Fake] │
+│ Prob: 0.85    │    │ Prob: 0.78      │    │ Prob: 0.65   │
+└───────┬───────┘    └────────┬────────┘    └──────┬───────┘
+        │                     │                     │
+        └─────────────────────┼─────────────────────┘
+                              │
+                              ▼
+                    ┌──────────────────────────────┐
+                    │  STORE FRAME RESULTS         │
+                    │  • Frame number              │
+                    │  • 3 model predictions       │
+                    │  • Face bbox (if detected)   │
+                    │  • Timestamp                 │
+                    └──────────┬───────────────────┘
+                               │
+                               │ (Repeat for all frames)
+                               │
+                               ▼
+                    ┌──────────────────────────────┐
+                    │  PROGRESS TRACKING           │
+                    │  Show: X/N frames processed  │
+                    └──────────┬───────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────────────────────────┐
+                    │  TEMPORAL AGGREGATION                │
+                    │  Per Model:                          │
+                    │  • Average probabilities across frames│
+                    │  • Count REAL/FAKE predictions       │
+                    │  • Calculate consistency score       │
+                    └──────────┬───────────────────────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+┌───────────────┐    ┌─────────────────┐    ┌──────────────┐
+│ EfficientNet  │    │ Swin Transform  │    │  Custom CNN  │
+│ Avg: 78% FAKE │    │ Avg: 82% FAKE   │    │ Avg: 65% FAKE│
+│ 24/30 FAKE    │    │ 27/30 FAKE      │    │ 18/30 FAKE   │
+└───────┬───────┘    └────────┬────────┘    └──────┬───────┘
+        │                     │                     │
+        └─────────────────────┼─────────────────────┘
+                              │
+                              ▼
+                    ┌──────────────────────────────┐
+                    │  ENSEMBLE DECISION           │
+                    │  • Weighted average: 0.4/0.4/0.2│
+                    │  • Majority voting           │
+                    │  • Confidence threshold      │
+                    └──────────┬───────────────────┘
+                               │
+                               ▼
+                    ┌──────────────────────────────┐
+                    │  FINAL VIDEO VERDICT         │
+                    │  FAKE ⚠️ - Confidence: 75.3% │
+                    └──────────┬───────────────────┘
+                               │
+                               ▼
+            ┌──────────────────────────────────────────┐
+            │         DISPLAY RESULTS                  │
+            │                                          │
+            │  ┌────────────────────────────────────┐  │
+            │  │  Per-Model Video Analysis          │  │
+            │  │  EfficientNet: FAKE 78% (24/30)   │  │
+            │  │  Swin: FAKE 82% (27/30)            │  │
+            │  │  Custom: FAKE 65% (18/30)          │  │
+            │  └────────────────────────────────────┘  │
+            │                                          │
+            │  ┌────────────────────────────────────┐  │
+            │  │  Final Verdict Banner              │  │
+            │  │  🔴 FAKE VIDEO - Conf: 75.3%      │  │
+            │  └────────────────────────────────────┘  │
+            │                                          │
+            │  ┌────────────────────────────────────┐  │
+            │  │  Sample Faces Grid (6-9 faces)     │  │
+            │  │  Shows detected faces from frames  │  │
+            │  └────────────────────────────────────┘  │
+            │                                          │
+            │  ┌────────────────────────────────────┐  │
+            │  │  Temporal Analysis Chart           │  │
+            │  │  Frame-by-frame confidence plot    │  │
+            │  └────────────────────────────────────┘  │
+            └──────────────────────────────────────────┘
+
+================================================================================
+MERMAID CODE FOR VIDEO ANALYSIS WORKFLOW:
+================================================================================
+
+```mermaid
+graph TD
+    A[User Uploads Video MP4/AVI/MOV] --> B[Video Validation]
+    B --> C[User Selects Frames & Mode]
+    C --> D[Frame Extraction Uniform Sampling]
+    D --> E{Analysis Mode}
+    E -->|Full Frame| F[Process Entire Frames]
+    E -->|Face Only| G[Detect Faces Per Frame]
+    F --> H[For Each Frame]
+    G --> H
+    H --> I[Parallel Model Processing]
+    I --> I1[EfficientNet 300×300]
+    I --> I2[Swin 224×224]
+    I --> I3[Custom 128×128]
+    I1 --> J[Store Frame Results]
+    I2 --> J
+    I3 --> J
+    J --> K{More Frames?}
+    K -->|Yes| H
+    K -->|No| L[Temporal Aggregation]
+    L --> M1[EfficientNet: Avg Probs]
+    L --> M2[Swin: Avg Probs]
+    L --> M3[Custom: Avg Probs]
+    M1 --> N[Ensemble Decision<br/>Weighted 0.4/0.4/0.2]
+    M2 --> N
+    M3 --> N
+    N --> O[Final Video Verdict]
+    O --> P[Display Results<br/>Per-Model + Verdict + Faces Grid + Chart]
+```
+
+================================================================================
+AI PROMPT FOR VIDEO WORKFLOW DIAGRAM:
+================================================================================
+
+Create a comprehensive flowchart for video deepfake detection. Show: Upload 
+video → Validation → User settings (frames, mode) → Frame extraction → Decision 
+diamond (Full/Face mode) → Face detection (if Face mode) → Loop through frames 
+(parallel 3-model processing) → Store results → Progress indicator → Temporal 
+aggregation per model → Ensemble decision → Final verdict → Results display 
+(4 sections: per-model analysis, verdict banner, faces grid, temporal chart). 
+Use purple for video processing, orange for models, blue for aggregation, green 
+for results. Include loop indicator. Landscape A4.
+
+================================================================================
+
+
+================================================================================
+              DIAGRAM 6: COMPLETE SYSTEM ARCHITECTURE
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 DEEPFAKE DETECTION SYSTEM - FULL ARCHITECTURE               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                          PRESENTATION LAYER                               ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                                     │
+        ┌────────────────────────────┼────────────────────────────┐
+        │                            │                            │
+        ▼                            ▼                            ▼
+┌───────────────┐          ┌──────────────────┐        ┌─────────────────┐
+│  Streamlit UI │          │  Dark Theme CSS  │        │  Session State  │
+│  • app.py     │          │  • Animations    │        │  • Cache        │
+│  • Responsive │          │  • Cyan accents  │        │  • User data    │
+└───────┬───────┘          └──────────────────┘        └─────────────────┘
+        │
+        ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                            INPUT LAYER                                    ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+        │
+        ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                      INPUT TYPE SELECTOR                          │
+│     Radio: [Image] [Video]                                        │
+└───────┬───────────────────────────────────────────┬───────────────┘
+        │                                           │
+        ▼                                           ▼
+┌─────────────────────┐                  ┌────────────────────────┐
+│  IMAGE UPLOADER     │                  │  VIDEO UPLOADER        │
+│  • JPG/PNG/JPEG     │                  │  • MP4/AVI/MOV         │
+│  • Max: 200MB       │                  │  • Max: 200MB          │
+│  • Single file      │                  │  • Frame selector      │
+└─────────┬───────────┘                  └────────┬───────────────┘
+          │                                       │
+          ▼                                       ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                      PREPROCESSING LAYER                                  ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+          │                                       │
+          ▼                                       ▼
+┌───────────────────────┐            ┌────────────────────────────┐
+│ utils_image_input.py  │            │ utils_video_input.py       │
+│ • File validation     │            │ • File validation          │
+│ • Format check        │            │ • Frame extraction         │
+└────────┬──────────────┘            │ • Uniform sampling         │
+         │                           └────────┬───────────────────┘
+         │                                    │
+         ▼                                    ▼
+┌────────────────────────────────────────────────────────────────────┐
+│              utils_image_processor.py                              │
+│              FACE DETECTION & EXTRACTION                           │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │  MediaPipe Face Detection                                    │ │
+│  │  • Model: short_range                                        │ │
+│  │  • Min confidence: 0.5                                       │ │
+│  │  • Returns: bbox [x, y, width, height]                      │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │  Face Extraction                                             │ │
+│  │  • Add 20% padding to bbox                                   │ │
+│  │  • Crop face region                                          │ │
+│  │  • BGR → RGB conversion                                      │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+└────────┬───────────────────────────────────────────────────────────┘
+         │
+         ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                    MODEL-SPECIFIC PREPROCESSING                           ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+         │
+         │  (Parallel processing for 3 models)
+         │
+    ┌────┴────┬─────────────────┬────────────────┐
+    │         │                 │                │
+    ▼         ▼                 ▼                │
+┌────────────────┐  ┌───────────────────┐  ┌──────────────────┐
+│ EfficientNet   │  │ Swin Transformer  │  │ Custom CNN       │
+│ Preprocessing  │  │ Preprocessing     │  │ Preprocessing    │
+│                │  │                   │  │                  │
+│ • Resize: 300  │  │ • Resize: 224     │  │ • Resize: 128    │
+│ • Center Crop  │  │ • Center Crop     │  │ • Center Crop    │
+│ • Normalize:   │  │ • Normalize:      │  │ • Normalize:     │
+│   mean=[0.485, │  │   mean=[0.485,    │  │   [0, 1]         │
+│         0.456, │  │         0.456,    │  │                  │
+│         0.406] │  │         0.406]    │  │                  │
+│   std=[0.229,  │  │   std=[0.229,     │  │                  │
+│        0.224,  │  │        0.224,     │  │                  │
+│        0.225]  │  │        0.225]     │  │                  │
+│ • To Tensor    │  │ • To Tensor       │  │ • To Tensor      │
+│   [1,3,300,300]│  │   [1,3,224,224]   │  │   [1,3,128,128]  │
+└────────┬───────┘  └────────┬──────────┘  └────────┬─────────┘
+         │                   │                      │
+         ▼                   ▼                      ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                         MODEL INFERENCE LAYER                             ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+         │                   │                      │
+         ▼                   ▼                      ▼
+┌─────────────────┐  ┌──────────────────┐  ┌────────────────────┐
+│ utils_eff.py    │  │ utils_swin.py    │  │ utils_model.py     │
+│ EfficientNet-B3 │  │ Swin-Base        │  │ Custom CNN         │
+│                 │  │                  │  │                    │
+│ 📦 12M params   │  │ 📦 88M params    │  │ 📦 430K params     │
+│ 💾 50MB         │  │ 💾 338MB         │  │ 💾 1.7MB           │
+│ 🎯 90-92% acc   │  │ 🎯 92-94% acc    │  │ 🎯 81-83% acc      │
+│                 │  │                  │  │                    │
+│ Loaded from:    │  │ Loaded from:     │  │ Loaded from:       │
+│ runs/models/    │  │ runs/models/     │  │ runs/models/       │
+│ efficientnet/   │  │ swin/            │  │ custom_lightweight/│
+│ best_model_cpu  │  │ best_model_cpu   │  │ best_model_cpu.pth │
+│ .pth            │  │ .pth             │  │                    │
+│                 │  │                  │  │                    │
+│ ⚡ Cached via   │  │ ⚡ Cached via     │  │ ⚡ Cached via       │
+│ @st.cache_      │  │ @st.cache_       │  │ @st.cache_resource │
+│ resource        │  │ resource         │  │                    │
+└────────┬────────┘  └────────┬─────────┘  └────────┬───────────┘
+         │                    │                     │
+         ▼                    ▼                     ▼
+┌─────────────────┐  ┌──────────────────┐  ┌────────────────────┐
+│ Forward Pass    │  │ Forward Pass     │  │ Forward Pass       │
+│ Output: [1, 2]  │  │ Output: [1, 2]   │  │ Output: [1, 2]     │
+│ (logits)        │  │ (logits)         │  │ (logits)           │
+└────────┬────────┘  └────────┬─────────┘  └────────┬───────────┘
+         │                    │                     │
+         ▼                    ▼                     ▼
+┌─────────────────┐  ┌──────────────────┐  ┌────────────────────┐
+│ Softmax         │  │ Softmax          │  │ Softmax            │
+│ [p_real, p_fake]│  │ [p_real, p_fake] │  │ [p_real, p_fake]   │
+└────────┬────────┘  └────────┬─────────┘  └────────┬───────────┘
+         │                    │                     │
+         ▼                    ▼                     ▼
+┌─────────────────┐  ┌──────────────────┐  ┌────────────────────┐
+│ Prediction:     │  │ Prediction:      │  │ Prediction:        │
+│ • Class: REAL   │  │ • Class: REAL    │  │ • Class: FAKE      │
+│ • Conf: 92.5%   │  │ • Conf: 89.3%    │  │ • Conf: 78.1%      │
+└────────┬────────┘  └────────┬─────────┘  └────────┬───────────┘
+         │                    │                     │
+         └────────────────────┼─────────────────────┘
+                              │
+                              ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                      ENSEMBLE & DECISION LAYER                            ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                              │
+                              ▼
+                ┌─────────────────────────────────┐
+                │    ENSEMBLE AGGREGATION         │
+                │    utils_improved_predictor.py  │
+                │                                 │
+                │  Weighted Average:              │
+                │  • EfficientNet: 0.4 × 92.5%    │
+                │  • Swin: 0.4 × 89.3%            │
+                │  • Custom: 0.2 × 78.1%          │
+                │  ────────────────────────────   │
+                │  Final Score: 87.8%             │
+                │                                 │
+                │  Decision Logic:                │
+                │  IF avg_prob > 0.5:             │
+                │      Verdict = FAKE ⚠️          │
+                │  ELSE:                          │
+                │      Verdict = REAL ✅          │
+                └────────────┬────────────────────┘
+                             │
+                             ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                         OUTPUT & VISUALIZATION LAYER                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                             │
+                             ▼
+            ┌────────────────────────────────────────────┐
+            │      utils_format.py                       │
+            │      RESULTS FORMATTING                    │
+            └────────────┬───────────────────────────────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+        ▼                ▼                ▼
+┌───────────────┐  ┌─────────────┐  ┌──────────────────┐
+│ Model Results │  │ Final       │  │ Visualizations   │
+│ Display       │  │ Verdict     │  │                  │
+│               │  │ Banner      │  │ • Original image │
+│ EfficientNet: │  │             │  │   + face bbox    │
+│ 🟢 REAL 92.5% │  │ 🟢 REAL ✅  │  │ • Extracted face │
+│               │  │ Conf: 87.8% │  │ • Confidence     │
+│ Swin:         │  │             │  │   indicators     │
+│ 🟢 REAL 89.3% │  │             │  │ • For video:     │
+│               │  │             │  │   faces grid &   │
+│ Custom CNN:   │  │             │  │   temporal chart │
+│ 🔴 FAKE 78.1% │  │             │  │                  │
+└───────────────┘  └─────────────┘  └──────────────────┘
+                         │
+                         ▼
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                         SUPPORT LAYER                                     ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────────┐
+│ utils_session.py │  │ setup.sh         │  │ utils_video_         │
+│ • Session state  │  │ • Model download │  │   processor.py       │
+│ • Cache mgmt     │  │ • Kaggle API     │  │ • Frame sampling     │
+│ • User data      │  │ • Extract to     │  │ • Temporal analysis  │
+│                  │  │   runs/models/   │  │ • Aggregation        │
+└──────────────────┘  └──────────────────┘  └──────────────────────┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                         INFRASTRUCTURE LAYER                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                        DEPLOYMENT PLATFORMS                           │
+│                                                                       │
+│  ┌─────────────────┐  ┌──────────────┐  ┌────────────────────┐      │
+│  │ Streamlit Cloud │  │ Docker       │  │ Hugging Face       │      │
+│  │ • Free tier     │  │ • Container  │  │ Spaces             │      │
+│  │ • Auto deploy   │  │ • Portable   │  │ • GPU support      │      │
+│  │ • 1GB RAM       │  │ • Scalable   │  │ • 16GB RAM         │      │
+│  └─────────────────┘  └──────────────┘  └────────────────────┘      │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                        DEPENDENCIES                                   │
+│                                                                       │
+│  PyTorch 2.0+ | Streamlit | MediaPipe | OpenCV | timm | Pillow      │
+│  efficientnet-pytorch | NumPy | Pandas | Matplotlib                  │
+└───────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+MERMAID CODE FOR COMPLETE SYSTEM ARCHITECTURE:
+================================================================================
+
+```mermaid
+graph TB
+    subgraph UI[Presentation Layer]
+        A[Streamlit App] --> B[Input Selector]
+    end
+    
+    subgraph Input[Input Layer]
+        B --> C1[Image Upload JPG/PNG]
+        B --> C2[Video Upload MP4/AVI]
+    end
+    
+    subgraph Preprocess[Preprocessing Layer]
+        C1 --> D[Face Detection MediaPipe]
+        C2 --> E[Frame Extraction]
+        E --> D
+        D --> F[Face Extraction + Padding]
+    end
+    
+    subgraph ModelPrep[Model-Specific Preprocessing]
+        F --> G1[EfficientNet: 300×300 ImageNet]
+        F --> G2[Swin: 224×224 ImageNet]
+        F --> G3[Custom: 128×128 Normalize]
+    end
+    
+    subgraph Models[Model Inference Layer]
+        G1 --> H1[EfficientNet-B3<br/>12M params, 90-92%]
+        G2 --> H2[Swin Transformer<br/>88M params, 92-94%]
+        G3 --> H3[Custom CNN<br/>430K params, 81-83%]
+    end
+    
+    subgraph Inference[Prediction Processing]
+        H1 --> I1[Softmax → Probs]
+        H2 --> I2[Softmax → Probs]
+        H3 --> I3[Softmax → Probs]
+    end
+    
+    subgraph Ensemble[Ensemble & Decision]
+        I1 --> J[Weighted Ensemble<br/>0.4, 0.4, 0.2]
+        I2 --> J
+        I3 --> J
+        J --> K{Threshold 0.5}
+        K -->|>0.5| L1[FAKE ⚠️]
+        K -->|≤0.5| L2[REAL ✅]
+    end
+    
+    subgraph Output[Output & Visualization]
+        L1 --> M[Display Results]
+        L2 --> M
+        M --> N1[Model Predictions]
+        M --> N2[Verdict Banner]
+        M --> N3[Visualizations]
+    end
+    
+    subgraph Support[Support Layer]
+        O1[Session State] -.-> A
+        O2[Model Cache] -.-> Models
+        O3[Setup Script] -.-> Models
+    end
+```
+
+================================================================================
+AI PROMPT FOR COMPLETE ARCHITECTURE DIAGRAM:
+================================================================================
+
+Create a comprehensive system architecture diagram for an AI deepfake detection 
+system. Structure in 7 horizontal layers from top to bottom:
+
+1. PRESENTATION: Streamlit UI with dark theme
+2. INPUT: Image/Video upload with file type indicators
+3. PREPROCESSING: Face detection (MediaPipe) and extraction pipeline
+4. MODEL-SPECIFIC PREP: Three parallel paths (EfficientNet 300×300, Swin 224×224, 
+   Custom 128×128) with normalization details
+5. MODEL INFERENCE: Three model boxes showing architecture names, parameter 
+   counts, file sizes, and accuracy percentages
+6. ENSEMBLE: Weighted aggregation (0.4/0.4/0.2) → Decision diamond (threshold 
+   0.5) → REAL/FAKE outputs
+7. OUTPUT: Three-panel display (model results, verdict banner, visualizations)
+
+Add side panel showing: Support layer (session state, cache, setup), 
+Infrastructure layer (deployment platforms: Streamlit/Docker/HuggingFace), 
+Dependencies (PyTorch, MediaPipe, etc.)
+
+Style: Modern cloud architecture diagram with clear layer separation using 
+horizontal bands. Blue gradients for data processing, orange for models, 
+green for decisions, purple for UI. Include icons for each component type. 
+Professional, technical documentation quality. Landscape A3 size to fit all 
+details clearly.
+
+================================================================================
+
+                         END OF DIAGRAMS DOCUMENT
+================================================================================
+
+Total Diagrams Included:
+1. EfficientNet-B3 Training Workflow
+2. Swin Transformer Training Workflow  
+3. Custom Lightweight CNN Training Workflow
+4. Image Analysis Workflow
+5. Video Analysis Workflow
+6. Complete System Architecture
+
+Each diagram includes:
+✓ Detailed ASCII art representation
+✓ Mermaid code for rendering
+✓ AI image generation prompt
+
+Use these diagrams for:
+• Documentation
+• Presentations
+• Research papers
+• GitHub README
+• Technical specifications
+• System design discussions
+
+================================================================================
