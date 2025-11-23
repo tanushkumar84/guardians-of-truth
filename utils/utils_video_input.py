@@ -336,15 +336,27 @@ def process_video_input(video_file):
                 # Prepare results for report
                 report_results = []
                 for result in results:
+                    # Calculate avg_prob_real and avg_prob_fake from the available data
+                    avg_probability = result.get('avg_probability', result.get('confidence', 0))
+                    
+                    # If prediction is FAKE, avg_probability represents probability of FAKE
+                    # If prediction is REAL, avg_probability represents probability of REAL
+                    if result.get('prediction') == 'FAKE':
+                        avg_prob_fake = avg_probability
+                        avg_prob_real = 1.0 - avg_probability
+                    else:
+                        avg_prob_real = avg_probability
+                        avg_prob_fake = 1.0 - avg_probability
+                    
                     report_result = {
                         'model_type': result.get('model_type', 'unknown'),
                         'prediction': result.get('prediction', 'Unknown'),
                         'confidence': result.get('confidence', 0),
-                        'num_faces': result.get('num_faces', num_frames),
+                        'num_faces': result.get('total_frames', result.get('num_faces', num_frames)),
                         'fake_count': result.get('fake_count', 0),
-                        'fake_ratio': result.get('fake_ratio', 0),
-                        'avg_prob_real': result.get('avg_prob_real', 0),
-                        'avg_prob_fake': result.get('avg_prob_fake', 0)
+                        'fake_ratio': result.get('fake_frame_ratio', result.get('fake_ratio', 0)),
+                        'avg_prob_real': avg_prob_real,
+                        'avg_prob_fake': avg_prob_fake
                     }
                     # Add artifact scores if available
                     if 'avg_artifact_score' in result:
