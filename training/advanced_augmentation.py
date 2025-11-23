@@ -97,12 +97,7 @@ class Cutout:
         self.length = length
 
     def __call__(self, img):
-        """
-        Args:
-            img (Tensor): Tensor image of size (C, H, W)
-        Returns:
-            Tensor: Image with n_holes of dimension length x length cut out
-        """
+
         h = img.size(1)
         w = img.size(2)
 
@@ -166,7 +161,6 @@ class MixupCutmix:
         cut_w = int(W * cut_rat)
         cut_h = int(H * cut_rat)
 
-        # Uniform sampling
         cx = np.random.randint(W)
         cy = np.random.randint(H)
 
@@ -177,7 +171,6 @@ class MixupCutmix:
 
         images[:, :, bbx1:bbx2, bby1:bby2] = images[index, :, bbx1:bbx2, bby1:bby2]
         
-        # Adjust lambda to exactly match pixel ratio
         lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (W * H))
         mixed_labels = lam * labels + (1 - lam) * labels[index]
         
@@ -260,19 +253,18 @@ def get_advanced_transforms(image_size, is_training=True):
     """
     if is_training:
         transform = T.Compose([
-            # PIL-based augmentations
+          
             T.Resize((image_size, image_size)),
             DeepfakeSpecificAugment(prob=0.3),
             RandAugment(n=2, m=10),
             T.RandomHorizontalFlip(p=0.5),
             
-            # Convert to tensor
             T.ToTensor(),
             
-            # Tensor-based augmentations
+
             Cutout(n_holes=1, length=image_size // 8),
             
-            # Normalize
+           
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     else:
@@ -300,15 +292,7 @@ class TestTimeAugmentation:
         ]
 
     def __call__(self, x):
-        """
-        Apply TTA and average predictions
-        
-        Args:
-            x: Input tensor [B, C, H, W]
-        
-        Returns:
-            Averaged predictions
-        """
+
         self.model.eval()
         predictions = []
         
@@ -351,4 +335,4 @@ if __name__ == '__main__':
     tensor_img = transform(dummy_img)
     logger.info(f"Full transform output shape: {tensor_img.shape}")
     
-    logger.info("✅ All augmentations working correctly!")
+    logger.info(" All augmentations working correctly!")
