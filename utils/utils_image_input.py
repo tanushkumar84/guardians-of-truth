@@ -58,7 +58,7 @@ def process_image_input(uploaded_file):
                 available_models_display.append("Swin Transformer (Pre-trained)")
             if (model_dir / "custom_lightweight/best_model_cpu.pth").exists():
                 available_models.append("custom")
-                available_models_display.append("Custom CNN (81% Accuracy)")
+                available_models_display.append("Custom CNN")
             
             # Create columns based on available models
             num_cols = len(available_models) if available_models else 2
@@ -157,8 +157,7 @@ def process_image_input(uploaded_file):
                             
                             st.markdown(f"""
                             <div style='padding: 15px; border-radius: 10px; border: 1px solid #4CAF50; margin: 5px 0;'>
-                                <h4>CUSTOM CNN 🚀</h4>
-                                <p style='font-size: 0.9em; color: #4CAF50;'>⭐ Your Trained Model (81%)</p>
+                                <h4>CUSTOM CNN</h4>
                                 <p>Prediction: {format_prediction(custom_pred)}<br>
                                 Confidence: {format_confidence(confidence)}</p>
                             </div>
